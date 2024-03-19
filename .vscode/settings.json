@@ -1,1 +1,14 @@
-{ "solidity.remappings": ["forge-std/=lib/forge-std/src/"] }
+{
+  "editor.formatOnSave": true,
+  "solidity.formatter": "prettier",
+  "solidity.defaultCompiler": "remote",
+  "solidity.compileUsingRemoteVersion": "latest",
+  "solidity.packageDefaultDependenciesContractsDirectory": "src",
+  "solidity.packageDefaultDependenciesDirectory": "lib",
+  "git.ignoreLimitWarning": true,
+  "solidity.remappings": [
+    "@openzeppelin/=lib/openzeppelin-contracts/",
+    "ds-test/=lib/forge-std/lib/ds-test/src/",
+    "forge-std/=lib/forge-std/src/"
+  ]
+}
