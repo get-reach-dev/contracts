@@ -7,6 +7,7 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+// import "forge-std/console.sol";
 
 /**
  * @title ReachDistribution
@@ -24,14 +25,20 @@ contract ReachDistribution is Ownable, ReentrancyGuard {
     event Claimed(address indexed account, uint256 amount);
     event MissionCreated(
         address indexed creator,
-        uint256 missionId,
+        string missionId,
         uint256 amount
     );
 
-    uint256 public minMissionAmount = 10 ether;
+    struct Receiver {
+        address account;
+        uint8 amount;
+    }
+
+    uint256 public minMissionAmount = 200 ether;
     address public reachToken;
     address public signer;
     mapping(address => uint256) public nonces;
+    Receiver[] public receivers;
 
     constructor(address _reachToken, address _signer) Ownable(msg.sender) {
         require(_reachToken != address(0), "Invalid token address");
@@ -51,6 +58,16 @@ contract ReachDistribution is Ownable, ReentrancyGuard {
         signer = _signer;
     }
 
+    function setReceiver(address _receiver, uint8 _amount) external onlyOwner {
+        receivers.push(Receiver(_receiver, _amount));
+    }
+
+    function deleteReceiver(uint256 _index) external onlyOwner {
+        require(_index < receivers.length, "Invalid index");
+        receivers[_index] = receivers[receivers.length - 1];
+        receivers.pop();
+    }
+
     /**
      * @dev Update the minimum mission amount
      * @param _minMissionAmount The new minimum mission amount
@@ -65,16 +82,13 @@ contract ReachDistribution is Ownable, ReentrancyGuard {
      * @dev Create a new mission
      * @param _amount The amount of tokens to reward
      */
-    function createMission(uint256 _amount) external {
+    function createMission(string memory _missionId, uint256 _amount) external {
         if (_amount < minMissionAmount) {
             revert InvalidMissionRewards();
         }
-        uint256 missionId = uint256(
-            keccak256(abi.encodePacked(msg.sender, block.timestamp, _amount))
-        );
 
-        IERC20(reachToken).safeTransferFrom(msg.sender, address(this), _amount);
-        emit MissionCreated(msg.sender, missionId, _amount);
+        dispatchTokens(_amount);
+        emit MissionCreated(msg.sender, _missionId, _amount);
     }
 
     /**
@@ -90,15 +104,9 @@ contract ReachDistribution is Ownable, ReentrancyGuard {
         bytes memory _signature,
         address _to
     ) external nonReentrant {
-        if (_to == address(0)) {
-            revert InvalidAddress();
-        }
-        if (!verify(_amount, _nonce, _to, _signature)) {
-            revert InvalidSignature();
-        }
-        if (nonces[_to] != _nonce) {
-            revert InvalidNonce();
-        }
+        require(_to != address(0), "Invalid address");
+        require(verify(_amount, _nonce, _to, _signature), "Invalid signature");
+        require(nonces[_to] == _nonce, "Invalid nonce");
 
         nonces[_to]++;
         IERC20(reachToken).safeTransfer(_to, _amount);
@@ -133,11 +141,11 @@ contract ReachDistribution is Ownable, ReentrancyGuard {
 
     /**
      * @dev Prepares a message hash to match the Ethereum signed message format.
-     * @param hash The original hash of the message data (e.g., keccak256).
+     * @param _hash The original hash of the message data (e.g., keccak256).
      * @return The hash of the Ethereum signed message.
      */
     function toEthSignedMessageHash(
-        bytes32 hash
+        bytes32 _hash
     ) internal pure returns (bytes32) {
         // Length of the original hash in bytes, converted to a string
         string memory length = "32"; // For a bytes32 hash, the length is always 32 bytes
@@ -145,6 +153,22 @@ contract ReachDistribution is Ownable, ReentrancyGuard {
         string memory prefix = "\x19Ethereum Signed Message:\n";
 
         // Concatenate the prefix, the length, and the hash itself
-        return keccak256(abi.encodePacked(prefix, length, hash));
+        return keccak256(abi.encodePacked(prefix, length, _hash));
+    }
+
+    function dispatchTokens(uint256 _amount) internal {
+        uint256 totalAmount = 0;
+        uint256 amount = 0;
+        for (uint256 i = 0; i < receivers.length; i++) {
+            amount = (_amount * receivers[i].amount) / 100;
+            totalAmount += amount;
+            IERC20(reachToken).safeTransferFrom(
+                msg.sender,
+                receivers[i].account,
+                amount
+            );
+        }
+        amount = _amount - totalAmount;
+        IERC20(reachToken).safeTransferFrom(msg.sender, address(this), _amount);
     }
 }

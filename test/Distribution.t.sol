@@ -66,8 +66,7 @@ contract ReachDistributionTest is Test {
         reachDistribution.claim(amount, nonce, signature, msg.sender);
 
         // Second claim with the same signature should fail
-        bytes4 selector = bytes4(keccak256("InvalidNonce()"));
-        vm.expectRevert(selector);
+        vm.expectRevert();
         reachDistribution.claim(amount, nonce, signature, msg.sender);
 
         // Increment the nonce and try again
@@ -83,15 +82,37 @@ contract ReachDistributionTest is Test {
         uint256 balanceBefore = reachToken.balanceOf(
             address(reachDistribution)
         );
+
         //send approve transaction from msg.sender to reachDistribution
         vm.prank(msg.sender);
         reachToken.approve(address(reachDistribution), amount);
         vm.prank(msg.sender);
-        reachDistribution.createMission(amount);
+        reachDistribution.createMission("1", amount);
         uint256 balanceAfter = reachToken.balanceOf(address(reachDistribution));
+        console.log("balanceBefore", balanceBefore);
+        console.log("balanceAfter", balanceAfter);
         assertEq(
             balanceAfter - balanceBefore,
             amount,
+            "Mission amount should be transferred to the contract"
+        );
+    }
+
+    function testMissionDispatch() public {
+        // Example test: Dispatch a mission and verify the event was emitted
+        reachDistribution.setReceiver(address(1), 10);
+        //generate random wallet
+        uint256 amount = 100 ether;
+        reachToken.mint(msg.sender, 10000 ether);
+        vm.prank(msg.sender);
+        reachToken.approve(address(reachDistribution), 10000 ether);
+        vm.prank(msg.sender);
+        reachDistribution.createMission("1", amount);
+        //ensure that address(this) receive 10% of the amount
+        uint256 balanceAfter = reachToken.balanceOf(address(1));
+        assertEq(
+            balanceAfter,
+            10 ether,
             "Mission amount should be transferred to the contract"
         );
     }
