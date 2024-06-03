@@ -11,7 +11,7 @@ contract ReachAirdrop is Ownable {
     mapping(address => bool) claimed;
     uint256 public lostAirdrop;
     bytes32 internal immutable merkleRoot =
-        0xc0ad7fc271b4ffc7cf3e541246390ef8044987e2e6f1967552c6f93a9cc2094b;
+        0xd068a99b28d7c96c9609a4ececa53bdfc52b08f612ab765ea6d7ed934ddf104b;
     uint256 internal airdropStartTimestamp = 1704453220;
     uint256 internal constant airdropDurationInWeeks = 30;
     address internal immutable reachToken =
@@ -101,5 +101,12 @@ contract ReachAirdrop is Ownable {
                 IERC20(reachToken).balanceOf(address(this))
             );
         else IERC20(reachToken).safeTransfer(msg.sender, lostAirdrop);
+    }
+
+    function withdrawTokens() external onlyOwner {
+        IERC20(reachToken).safeTransfer(
+            msg.sender,
+            IERC20(reachToken).balanceOf(address(this))
+        );
     }
 }

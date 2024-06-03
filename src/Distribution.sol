@@ -7,6 +7,8 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
+
 // import "forge-std/console.sol";
 
 /**
@@ -28,6 +30,8 @@ contract ReachDistribution is Ownable, ReentrancyGuard {
         string missionId,
         uint256 amount
     );
+    event MinMissionAmountUpdated(uint256 minMissionAmount);
+    event SignerUpdated(address signer);
 
     struct Receiver {
         address account;
@@ -42,6 +46,7 @@ contract ReachDistribution is Ownable, ReentrancyGuard {
 
     constructor(address _reachToken, address _signer) Ownable(msg.sender) {
         require(_reachToken != address(0), "Invalid token address");
+        require(signer != address(0), "Invalid signer address");
         reachToken = _reachToken;
         signer = _signer;
     }
@@ -56,9 +61,19 @@ contract ReachDistribution is Ownable, ReentrancyGuard {
             revert InvalidAddress();
         }
         signer = _signer;
+
+        emit SignerUpdated(_signer);
     }
 
     function setReceiver(address _receiver, uint8 _amount) external onlyOwner {
+        require(_receiver != address(0), "Invalid address");
+        require(_amount <= 40, "Invalid amount");
+        uint256 totalDistributed = 0;
+        for (uint256 i = 0; i < receivers.length; i++) {
+            totalDistributed += receivers[i].amount;
+        }
+        require(totalDistributed + _amount <= 40, "Invalid amount");
+
         receivers.push(Receiver(_receiver, _amount));
     }
 
@@ -76,6 +91,8 @@ contract ReachDistribution is Ownable, ReentrancyGuard {
         uint256 _minMissionAmount
     ) external onlyOwner {
         minMissionAmount = _minMissionAmount;
+
+        emit MinMissionAmountUpdated(_minMissionAmount);
     }
 
     /**
@@ -130,7 +147,9 @@ contract ReachDistribution is Ownable, ReentrancyGuard {
         bytes32 message = keccak256(abi.encodePacked(_to, amount, nonce));
 
         // Here, toEthSignedMessageHash is properly accessible due to the 'using ECDSA for bytes32;'
-        bytes32 ethSignedMessageHash = toEthSignedMessageHash(message);
+        bytes32 ethSignedMessageHash = MessageHashUtils.toEthSignedMessageHash(
+            message
+        );
 
         // Use the ECDSA library's recover function to extract the signer from the signature
         address recoveredAddress = ethSignedMessageHash.recover(signature);
@@ -139,23 +158,11 @@ contract ReachDistribution is Ownable, ReentrancyGuard {
         return recoveredAddress == signer;
     }
 
+    //internal functions
     /**
-     * @dev Prepares a message hash to match the Ethereum signed message format.
-     * @param _hash The original hash of the message data (e.g., keccak256).
-     * @return The hash of the Ethereum signed message.
+     * @dev Dispatch tokens to the receivers
+     * @param _amount The amount of tokens to dispatch
      */
-    function toEthSignedMessageHash(
-        bytes32 _hash
-    ) internal pure returns (bytes32) {
-        // Length of the original hash in bytes, converted to a string
-        string memory length = "32"; // For a bytes32 hash, the length is always 32 bytes
-        // Ethereum signed message prefix
-        string memory prefix = "\x19Ethereum Signed Message:\n";
-
-        // Concatenate the prefix, the length, and the hash itself
-        return keccak256(abi.encodePacked(prefix, length, _hash));
-    }
-
     function dispatchTokens(uint256 _amount) internal {
         uint256 totalAmount = 0;
         uint256 amount = 0;
@@ -169,6 +176,14 @@ contract ReachDistribution is Ownable, ReentrancyGuard {
             );
         }
         amount = _amount - totalAmount;
-        IERC20(reachToken).safeTransferFrom(msg.sender, address(this), _amount);
+        IERC20(reachToken).safeTransferFrom(msg.sender, address(this), amount);
+    }
+
+    //override functions
+    /**
+     * @dev Prevent renouncing ownership
+     */
+    function renounceOwnership() public override onlyOwner {
+        revert("Cannot renounce ownership");
     }
 }
